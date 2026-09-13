@@ -1,6 +1,17 @@
 // ─── Shared types ───────────────────────────────────────────────────────────
 
-export type ResourceType = "wood" | "stone" | "food" | "gem" | "lantern" | "rope" | "herb";
+export type ResourceType =
+  | "wood"
+  | "stone"
+  | "food"
+  | "gem"
+  | "lantern"
+  | "rope"
+  | "herb"
+  | "mushroom"
+  | "coal"
+  | "axe"
+  | "pickaxe";
 
 export interface InventoryItem {
   type: ResourceType;
@@ -22,7 +33,7 @@ export interface Quest {
 
 export interface SpiritClue {
   text: string;
-  hint: string; // area name
+  hint: string;
 }
 
 export interface TradeOffer {
@@ -42,11 +53,25 @@ export type TimeOfDay = "dawn" | "day" | "dusk" | "night";
 
 export interface WorldObject {
   id: string;
-  kind: "tree" | "rock" | "food" | "campfire" | "shelter" | "cabin" | "cave" | "ruins" | "trader";
+  kind:
+    | "tree"
+    | "rock"
+    | "food"
+    | "mushroom"
+    | "campfire"
+    | "shelter"
+    | "cabin"
+    | "cave"
+    | "ruins"
+    | "trader"
+    | "river"
+    | "mountain"
+    | "village";
   x: number;
   z: number;
   depleted?: boolean;
   depletedAt?: number;
+  variant?: number;
 }
 
 export interface MonsterState {
@@ -59,7 +84,10 @@ export interface MonsterState {
   chaseRadius: number;
   chasing: boolean;
   hp: number;
-  kind: "shadow" | "wraith" | "beast";
+  maxHp: number;
+  kind: "shadow" | "wraith" | "beast" | "goblin";
+  stunned: number; // seconds remaining stunned
+  retreating: boolean;
 }
 
 export interface SpiritState {
@@ -68,16 +96,20 @@ export interface SpiritState {
   z: number;
   clue: SpiritClue;
   visible: boolean;
+  read: boolean;
 }
 
 export interface PlayerState {
   x: number;
   z: number;
-  angle: number; // facing direction in radians
+  angle: number;
   hp: number;
   maxHp: number;
-  hunger: number; // 0-100, drains over time
+  hunger: number;
   hasCampfire: boolean;
   hasShelter: boolean;
   hasLantern: boolean;
+  hasAxe: boolean;
+  hasPickaxe: boolean;
+  invincibleTimer: number;
 }

@@ -32,20 +32,43 @@ export interface GameState {
   nearTrader: boolean;
   nearCampfire: boolean;
   nearShelter: boolean;
+  nearCave: boolean;
+  nearCabin: boolean;
+  nearRuins: boolean;
+  nearVillage: boolean;
   activeClue: string | null;
   showInventory: boolean;
   showQuests: boolean;
+  spiritsRead: number;
+  monstersRepelled: number;
+  highScore: number;
+}
+
+function loadHighScore(): number {
+  try {
+    return parseInt(localStorage.getItem("whispers_highscore") ?? "0", 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function saveHighScore(score: number) {
+  try {
+    const prev = loadHighScore();
+    if (score > prev) localStorage.setItem("whispers_highscore", String(score));
+  } catch {
+    // ignore
+  }
 }
 
 export function createInitialState(): GameState {
   const inv: Inventory = new Map();
-  inv.set("wood", 0);
-  inv.set("stone", 0);
-  inv.set("food", 2);
-  inv.set("gem", 0);
-  inv.set("lantern", 0);
-  inv.set("rope", 0);
-  inv.set("herb", 0);
+  const resources: ResourceType[] = [
+    "wood", "stone", "food", "gem", "lantern", "rope", "herb",
+    "mushroom", "coal", "axe", "pickaxe",
+  ];
+  for (const r of resources) inv.set(r, 0);
+  inv.set("food", 3);
 
   return {
     player: {
@@ -58,6 +81,9 @@ export function createInitialState(): GameState {
       hasCampfire: false,
       hasShelter: false,
       hasLantern: false,
+      hasAxe: false,
+      hasPickaxe: false,
+      invincibleTimer: 0,
     },
     inventory: inv,
     quests: buildQuests(),
@@ -66,7 +92,7 @@ export function createInitialState(): GameState {
     monsters: [],
     spirits: [],
     messages: [],
-    time: 0.25, // start at dawn
+    time: 0.25,
     dayCount: 1,
     timeOfDay: "dawn",
     score: 0,
@@ -75,9 +101,16 @@ export function createInitialState(): GameState {
     nearTrader: false,
     nearCampfire: false,
     nearShelter: false,
+    nearCave: false,
+    nearCabin: false,
+    nearRuins: false,
+    nearVillage: false,
     activeClue: null,
     showInventory: false,
     showQuests: true,
+    spiritsRead: 0,
+    monstersRepelled: 0,
+    highScore: loadHighScore(),
   };
 }
 
@@ -89,8 +122,7 @@ export function addMessage(
 ) {
   const id = ++_msgId;
   state.messages.push({ id, text, type, expires: Date.now() + duration });
-  // keep max 5
-  if (state.messages.length > 5) state.messages.shift();
+  if (state.messages.length > 4) state.messages.shift();
 }
 
 export function addInventory(state: GameState, type: ResourceType, count: number) {
@@ -103,10 +135,10 @@ export function getInv(state: GameState, type: ResourceType): number {
 }
 
 export function computeTimeOfDay(t: number): TimeOfDay {
-  if (t < 0.1 || t >= 0.95) return "night";
+  if (t < 0.08 || t >= 0.93) return "night";
   if (t < 0.2) return "dawn";
-  if (t < 0.75) return "day";
-  if (t < 0.95) return "dusk";
+  if (t < 0.72) return "day";
+  if (t < 0.93) return "dusk";
   return "night";
 }
 
