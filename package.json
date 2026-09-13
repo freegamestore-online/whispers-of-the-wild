@@ -1,13 +1,13 @@
 {
-  "name": "APPNAME",
+  "name": "whispers-of-the-wild",
   "private": true,
   "packageManager": "pnpm@10.30.3",
   "engines": { "node": ">=22" },
   "pnpm": { "onlyBuiltDependencies": ["esbuild"] },
   "scripts": {
-    "dev": "pnpm --filter @APPNAME/web dev",
-    "build": "pnpm --filter @APPNAME/web build",
-    "preview": "pnpm --filter @APPNAME/web preview",
-    "typecheck": "pnpm --filter @APPNAME/web exec tsc -b"
+    "dev": "pnpm --filter @whispers-of-the-wild/web dev",
+    "build": "pnpm --filter @whispers-of-the-wild/web build",
+    "preview": "pnpm --filter @whispers-of-the-wild/web preview",
+    "typecheck": "pnpm --filter @whispers-of-the-wild/web exec tsc -b"
   }
 }

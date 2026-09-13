@@ -1,5 +1,5 @@
 {
-  "name": "@APPNAME/web",
+  "name": "@whispers-of-the-wild/web",
   "private": true,
   "type": "module",
   "scripts": {
