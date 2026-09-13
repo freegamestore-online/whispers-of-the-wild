@@ -7,6 +7,7 @@ import type {
   SpiritState,
   GameMessage,
   TimeOfDay,
+  ResourceType,
 } from "./types";
 import type { Quest } from "./types";
 import { buildQuests } from "./quests";
@@ -92,12 +93,12 @@ export function addMessage(
   if (state.messages.length > 5) state.messages.shift();
 }
 
-export function addInventory(state: GameState, type: keyof Inventory extends never ? never : Parameters<Inventory["get"]>[0], count: number) {
+export function addInventory(state: GameState, type: ResourceType, count: number) {
   const cur = state.inventory.get(type) ?? 0;
   state.inventory.set(type, Math.max(0, cur + count));
 }
 
-export function getInv(state: GameState, type: Parameters<Inventory["get"]>[0]): number {
+export function getInv(state: GameState, type: ResourceType): number {
   return state.inventory.get(type) ?? 0;
 }
 
