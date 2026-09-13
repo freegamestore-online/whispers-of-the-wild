@@ -10,6 +10,10 @@ const RESOURCE_ICONS: Record<ResourceType, string> = {
   lantern: "🏮",
   rope: "🪢",
   herb: "🌿",
+  mushroom: "🍄",
+  coal: "🪨",
+  axe: "🪓",
+  pickaxe: "⛏️",
 };
 
 const TRADE_OFFERS: TradeOffer[] = [
@@ -148,7 +152,7 @@ export function HUD({
               }}
             />
           </div>
-          <span className="text-xs text-gray-400">{state.player.hp}</span>
+          <span className="text-xs text-gray-400">{Math.round(state.player.hp)}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs w-4">🍽️</span>
@@ -208,9 +212,7 @@ export function HUD({
       </div>
 
       {/* ── Action buttons ──────────────────────────────────────────────── */}
-      <div
-        className="absolute bottom-4 left-0 right-0 z-30 flex justify-center gap-2 px-3 flex-wrap"
-      >
+      <div className="absolute bottom-4 left-0 right-0 z-30 flex justify-center gap-2 px-3 flex-wrap">
         <ActionBtn emoji="🪓" label="Chop" onClick={onChop} color="#2d5a27" />
         <ActionBtn emoji="⛏️" label="Mine" onClick={onMine} color="#4a3a1a" />
         <ActionBtn emoji="🍎" label="Gather" onClick={onGather} color="#5a1a2a" />
@@ -390,7 +392,7 @@ export function HUD({
                     {q.completed ? "✅" : q.unlocked ? "🔵" : "🔒"} {q.title}
                   </div>
                   <div className="text-gray-400">{q.description}</div>
-                  {q.reward && q.unlocked && !q.completed && (
+                  {q.reward && q.reward.count > 0 && q.unlocked && !q.completed && (
                     <div className="text-yellow-500 mt-1">
                       Reward: {RESOURCE_ICONS[q.reward.type]} {q.reward.count} {q.reward.type}
                     </div>
@@ -409,7 +411,7 @@ export function HUD({
       >
         <div>WASD/Arrows: Move</div>
         <div>T: Trade (near trader)</div>
-        <div>Click world objects</div>
+        <div>Click spirits at night</div>
       </div>
     </>
   );

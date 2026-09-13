@@ -9,6 +9,7 @@ import {
   getInv,
   computeTimeOfDay,
   addScore,
+  saveHighScore,
   type GameState,
 } from "./lib/gameState";
 import { generateWorld } from "./lib/world";
@@ -151,6 +152,25 @@ function buildRuinsMesh(scene: BABYLON.Scene, x: number, z: number): BABYLON.Mes
   return base;
 }
 
+function buildVillageMesh(scene: BABYLON.Scene, x: number, z: number): BABYLON.Mesh {
+  const base = BABYLON.MeshBuilder.CreateBox("village", { width: 10, height: 0.3, depth: 10 }, scene);
+  base.position.set(x, 0.15, z);
+  const mat = new BABYLON.StandardMaterial("villageMat", scene);
+  mat.diffuseColor = new BABYLON.Color3(0.35, 0.3, 0.22);
+  base.material = mat;
+  // A few small ruined structures
+  for (let i = 0; i < 3; i++) {
+    const hut = BABYLON.MeshBuilder.CreateBox(
+      `village_hut_${i}`,
+      { width: 2, height: 1.5, depth: 2 },
+      scene
+    );
+    hut.position.set(x + (i - 1) * 3.5, 0.75, z + (i % 2 === 0 ? 2 : -2));
+    hut.material = mat;
+  }
+  return base;
+}
+
 function buildTraderMesh(scene: BABYLON.Scene, x: number, z: number): BABYLON.Mesh {
   const body = BABYLON.MeshBuilder.CreateCylinder(
     "trader",
@@ -181,6 +201,7 @@ function buildMonsterMesh(
     shadow: new BABYLON.Color3(0.1, 0.05, 0.2),
     wraith: new BABYLON.Color3(0.3, 0.1, 0.5),
     beast: new BABYLON.Color3(0.5, 0.1, 0.1),
+    goblin: new BABYLON.Color3(0.1, 0.35, 0.1),
   };
   const mesh = BABYLON.MeshBuilder.CreateBox(
     `monster_${id}`,
@@ -224,6 +245,7 @@ function spawnWorldMeshes(
     else if (obj.kind === "cabin") mesh = buildCabinMesh(scene, obj.x, obj.z);
     else if (obj.kind === "cave") mesh = buildCaveMesh(scene, obj.x, obj.z);
     else if (obj.kind === "ruins") mesh = buildRuinsMesh(scene, obj.x, obj.z);
+    else if (obj.kind === "village") mesh = buildVillageMesh(scene, obj.x, obj.z);
     else if (obj.kind === "trader") mesh = buildTraderMesh(scene, obj.x, obj.z);
     if (mesh) worldMeshes.set(obj.id, mesh);
   }
@@ -393,6 +415,7 @@ export default function App() {
     addInventory(gs, "wood", -10);
     addInventory(gs, "stone", -3);
     gs.player.hasShelter = true;
+    gs.flags.add("shelter_built");
     addMessage(gs, "🏕️ Shelter built! You have a home base.", "quest");
     addScore(gs, 60);
     syncHUD();
@@ -587,6 +610,9 @@ export default function App() {
       for (const sp of g.spirits) {
         if (meshName === `spirit_${sp.id}` && sp.visible) {
           g.activeClue = sp.clue.text;
+          sp.read = true;
+          g.spiritsRead = g.spirits.filter((s) => s.read).length;
+          if (g.spiritsRead >= 3) g.flags.add("spirits_3");
           addScore(g, 25);
           syncHUD();
           return;
@@ -681,7 +707,7 @@ export default function App() {
       m.playerHead.position.set(g.player.x, 2.1, g.player.z);
       camera.target.set(g.player.x, 1, g.player.z);
 
-      // Hunger
+      // Hunger drain
       g.player.hunger = Math.max(0, g.player.hunger - (HUNGER_DRAIN_RATE / 60) * dt);
       if (g.player.hunger <= 0) {
         g.player.hp = Math.max(0, g.player.hp - 3 * dt);
@@ -698,143 +724,180 @@ export default function App() {
         g.nearCampfire = false;
       }
 
-      // Shelter
-      if (g.player.hasShelter && m.campfireMesh) {
-        g.nearShelter =
-          dist2d(g.player.x, g.player.z, m.campfireMesh.position.x, m.campfireMesh.position.z) <
-          REGEN_RADIUS + 2;
+      // Shelter proximity
+      if (g.player.hasShelter) {
+        g.nearShelter = dist2d(g.player.x, g.player.z, 0, 0) < REGEN_RADIUS + 2;
+        if (g.nearShelter) {
+          g.player.hp = Math.min(g.player.maxHp, g.player.hp + 2 * dt);
+          g.player.hunger = Math.min(100, g.player.hunger + 1 * dt);
+        }
       } else {
         g.nearShelter = false;
-      }
-
-      // Trader proximity + animation
-      const traderObj = g.worldObjects.find((o) => o.kind === "trader");
-      if (traderObj) {
-        g.nearTrader = dist2d(g.player.x, g.player.z, traderObj.x, traderObj.z) < INTERACT_RADIUS + 2;
-        const tm = m.worldMeshes.get("trader");
-        if (tm) tm.position.y = 1 + Math.sin(now / 600) * 0.15;
       }
 
       // Resource respawn
       const nowMs = Date.now();
       for (const obj of g.worldObjects) {
-        if (obj.depleted && obj.depletedAt !== undefined && nowMs - obj.depletedAt > RESOURCE_RESPAWN * 1000) {
+        if (
+          obj.depleted &&
+          obj.depletedAt !== undefined &&
+          nowMs - obj.depletedAt > RESOURCE_RESPAWN * 1000
+        ) {
           obj.depleted = false;
           obj.depletedAt = undefined;
-          const rmesh = m.worldMeshes.get(obj.id);
-          if (rmesh) rmesh.isVisible = true;
+          const mesh = m.worldMeshes.get(obj.id);
+          if (mesh) mesh.isVisible = true;
         }
       }
 
-      // Location discovery
+      // Proximity flags for landmarks
       const cabinObj = g.worldObjects.find((o) => o.kind === "cabin");
       if (cabinObj && !g.flags.has("cabin_found") && dist2d(g.player.x, g.player.z, cabinObj.x, cabinObj.z) < 8) {
         g.flags.add("cabin_found");
-        addMessage(g, "📍 Found the abandoned cabin!", "quest");
-        addScore(g, 40);
+        addMessage(g, "🏚️ Found the abandoned cabin!", "quest");
+        addScore(g, 30);
       }
+
       const caveObj = g.worldObjects.find((o) => o.kind === "cave");
       if (caveObj && !g.flags.has("cave_found") && dist2d(g.player.x, g.player.z, caveObj.x, caveObj.z) < 8) {
         g.flags.add("cave_found");
-        addMessage(g, "🕳️ Discovered a cave entrance!", "quest");
+        addMessage(g, "🕳️ Discovered the cave entrance!", "quest");
         addScore(g, 30);
       }
+
       const ruinsObj = g.worldObjects.find((o) => o.kind === "ruins");
       if (ruinsObj && !g.flags.has("ruins_found") && dist2d(g.player.x, g.player.z, ruinsObj.x, ruinsObj.z) < 10) {
         g.flags.add("ruins_found");
-        addMessage(g, "🏛️ Ancient ruins discovered!", "quest");
-        addScore(g, 60);
+        addMessage(g, "🏛️ You found the ancient ruins!", "quest");
+        addScore(g, 30);
       }
 
-      // Monsters
+      const villageObj = g.worldObjects.find((o) => o.kind === "village");
+      if (villageObj && !g.flags.has("village_found") && dist2d(g.player.x, g.player.z, villageObj.x, villageObj.z) < 10) {
+        g.flags.add("village_found");
+        addMessage(g, "🏘️ You found the abandoned village!", "quest");
+        addScore(g, 30);
+      }
+
+      // Trader proximity
+      const traderObj = g.worldObjects.find((o) => o.kind === "trader");
+      g.nearTrader = !!(traderObj && dist2d(g.player.x, g.player.z, traderObj.x, traderObj.z) < INTERACT_RADIUS + 2);
+
+      // Spirits: show at night, hide at day
+      for (const sp of g.spirits) {
+        sp.visible = night;
+        const mesh = m.spiritMeshes.get(sp.id);
+        if (mesh) {
+          mesh.isVisible = sp.visible;
+          // Float up and down
+          mesh.position.y = 2.5 + Math.sin(now * 0.002 + sp.x) * 0.3;
+        }
+      }
+
+      // Monster AI
       for (const mon of g.monsters) {
-        const mmesh = m.monsterMeshes.get(mon.id);
-        if (!mmesh) continue;
-        if (!night) {
-          mmesh.isVisible = false;
-          mon.chasing = false;
+        const mesh = m.monsterMeshes.get(mon.id);
+
+        // Monsters only active at night (or always for beast/goblin during day with lower chance)
+        const monsterActive = night || mon.kind === "beast" || mon.kind === "goblin";
+        if (mesh) mesh.isVisible = monsterActive;
+        if (!monsterActive) continue;
+
+        if (mon.stunned > 0) {
+          mon.stunned -= dt;
           continue;
         }
-        mmesh.isVisible = true;
-        const distToPlayer = dist2d(mon.x, mon.z, g.player.x, g.player.z);
-        if (distToPlayer < mon.alertRadius) mon.chasing = true;
-        else if (distToPlayer > mon.chaseRadius) mon.chasing = false;
-        if (mon.chasing) {
-          const speed = mon.kind === "wraith" ? WRAITH_SPEED : MONSTER_SPEED;
-          const ddx = g.player.x - mon.x;
-          const ddz = g.player.z - mon.z;
-          const dlen = Math.sqrt(ddx * ddx + ddz * ddz) || 1;
-          mon.vx = (ddx / dlen) * speed;
-          mon.vz = (ddz / dlen) * speed;
-        } else {
-          mon.vx += (Math.random() - 0.5) * 0.5;
-          mon.vz += (Math.random() - 0.5) * 0.5;
-          mon.vx *= 0.95;
-          mon.vz *= 0.95;
-        }
-        mon.x += mon.vx * dt;
-        mon.z += mon.vz * dt;
-        mmesh.position.set(mon.x, 1, mon.z);
-        mmesh.rotation.y += dt * (mon.kind === "wraith" ? 2 : 1);
 
-        if (distToPlayer < 1.5) {
-          if (g.nearCampfire) {
-            mon.chasing = false;
-          } else {
-            const dmg = mon.kind === "beast" ? 15 : mon.kind === "wraith" ? 8 : 5;
-            g.player.hp = Math.max(0, g.player.hp - dmg * dt);
-            const alreadyWarned = g.messages.some((msg) => msg.text.includes("attacking"));
-            if (!alreadyWarned) {
-              addMessage(g, `⚠️ A ${mon.kind} is attacking you! Run!`, "danger", 2000);
-            }
+        const d = dist2d(g.player.x, g.player.z, mon.x, mon.z);
+
+        // Campfire repels monsters
+        let repelledByFire = false;
+        if (g.player.hasCampfire && m.campfireMesh) {
+          const cfx = m.campfireMesh.position.x;
+          const cfz = m.campfireMesh.position.z;
+          const fireDist = dist2d(mon.x, mon.z, cfx, cfz);
+          if (fireDist < 12) repelledByFire = true;
+        }
+
+        // Lantern repels wraits
+        const repelledByLantern = g.player.hasLantern && mon.kind === "wraith" && d < 10;
+
+        if (repelledByFire || repelledByLantern) {
+          mon.chasing = false;
+          mon.retreating = true;
+        } else if (d < mon.alertRadius) {
+          mon.chasing = true;
+          mon.retreating = false;
+        } else if (d > mon.chaseRadius) {
+          mon.chasing = false;
+        }
+
+        const speed = mon.kind === "wraith" ? WRAITH_SPEED : MONSTER_SPEED;
+
+        if (mon.retreating) {
+          // Move away from player
+          const rdx = mon.x - g.player.x;
+          const rdz = mon.z - g.player.z;
+          const rlen = Math.sqrt(rdx * rdx + rdz * rdz) || 1;
+          mon.x += (rdx / rlen) * speed * dt;
+          mon.z += (rdz / rlen) * speed * dt;
+          if (dist2d(g.player.x, g.player.z, mon.x, mon.z) > mon.chaseRadius + 5) {
+            mon.retreating = false;
           }
+        } else if (mon.chasing) {
+          const cdx = g.player.x - mon.x;
+          const cdz = g.player.z - mon.z;
+          const clen = Math.sqrt(cdx * cdx + cdz * cdz) || 1;
+          mon.x += (cdx / clen) * speed * dt;
+          mon.z += (cdz / clen) * speed * dt;
+        }
+
+        if (mesh) mesh.position.set(mon.x, 1, mon.z);
+
+        // Damage player on contact
+        if (d < 1.5 && g.player.invincibleTimer <= 0) {
+          const dmg = mon.kind === "wraith" ? 15 : mon.kind === "beast" ? 20 : 10;
+          g.player.hp = Math.max(0, g.player.hp - dmg);
+          g.player.invincibleTimer = 1.5;
+          addMessage(g, `⚠️ ${mon.kind} attacks! -${dmg} HP`, "danger");
+          // Knock monster back
+          mon.stunned = 0.5;
+          mon.chasing = false;
         }
       }
 
-      // Spirits
-      for (const sp of g.spirits) {
-        const smesh = m.spiritMeshes.get(sp.id);
-        if (!smesh) continue;
-        sp.visible = night;
-        smesh.isVisible = night;
-        if (night) {
-          smesh.position.y = 2.5 + Math.sin(now / 800 + sp.x) * 0.4;
-          const spiritMat = smesh.material as BABYLON.StandardMaterial;
-          const pulse = 0.3 + Math.abs(Math.sin(now / 500)) * 0.4;
-          spiritMat.emissiveColor.set(pulse * 0.5, pulse * 0.1, pulse);
-        }
-      }
+      // Invincibility timer
+      if (g.player.invincibleTimer > 0) g.player.invincibleTimer -= dt;
 
-      // Campfire flicker
-      if (m.campfireLight) {
-        m.campfireLight.intensity = 1.8 + Math.sin(now / 120) * 0.4 + Math.sin(now / 80) * 0.2;
-      }
-
-      // Quest checks
-      const { updated, newlyCompleted } = checkQuests(g.quests, g.inventory, g.flags);
-      g.quests = updated;
-      for (const q of newlyCompleted) {
-        addMessage(g, `✅ Quest complete: ${q.title}!`, "quest", 5000);
-        addScore(g, 100);
-        if (q.unlockFlag) g.flags.add(q.unlockFlag);
-        if (q.reward) {
-          addInventory(g, q.reward.type, q.reward.count);
-          addMessage(g, `🎁 Reward: +${q.reward.count} ${q.reward.type}!`, "info", 3000);
-        }
+      // Game over
+      if (g.player.hp <= 0) {
+        g.gameOver = true;
+        saveHighScore(g.score);
       }
 
       // Message expiry
       messageTimer += dt * 1000;
       if (messageTimer > 200) {
         messageTimer = 0;
-        const nowMs2 = Date.now();
-        g.messages = g.messages.filter((msg) => msg.expires > nowMs2);
+        const now2 = Date.now();
+        g.messages = g.messages.filter((msg) => msg.expires > now2);
       }
 
-      // Game over
-      if (g.player.hp <= 0) g.gameOver = true;
+      // Quest checks
+      const { updated, newlyCompleted } = checkQuests(g.quests, g.inventory, g.flags);
+      g.quests = updated;
+      for (const q of newlyCompleted) {
+        if (q.reward && q.reward.count > 0) {
+          addInventory(g, q.reward.type, q.reward.count);
+          addMessage(g, `✅ Quest done: ${q.title}! +${q.reward.count} ${q.reward.type}`, "quest");
+        } else {
+          addMessage(g, `✅ Quest done: ${q.title}!`, "quest");
+        }
+        addScore(g, 50);
+        if (q.unlockFlag) g.flags.add(q.unlockFlag);
+      }
 
-      // HUD sync (throttled to 10fps)
+      // HUD sync throttle
       hudTimer += dt;
       if (hudTimer > 0.1) {
         hudTimer = 0;
@@ -843,9 +906,9 @@ export default function App() {
     });
 
     engine.runRenderLoop(() => scene.render());
+
     const onResize = () => engine.resize();
     window.addEventListener("resize", onResize);
-    syncHUD();
 
     return () => {
       window.removeEventListener("keydown", onKeyDown);
@@ -857,7 +920,7 @@ export default function App() {
 
   return (
     <Shell>
-      <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>
+      <div className="relative w-full h-full">
         <canvas
           ref={canvasRef}
           style={{ width: "100%", height: "100%", display: "block", touchAction: "none" }}
