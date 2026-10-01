@@ -1,6 +1,6 @@
 {
-  "name": "APPNAME",
-  "short_name": "APPNAME",
+  "name": "Whispers of the Wild",
+  "short_name": "Whispers of the Wild",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
